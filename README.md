@@ -13,18 +13,20 @@ Released under AGPL see LICENSE for more information
 
 Installing  
 =======================
-  git clone https://github.com/nccgroup/easyda.git
+    git clone https://github.com/nccgroup/easyda.git
 
 
 How To Use	
 =======================
-./easyda.sh
+    ./easyda.sh
 
 
 Features	
 =======================
 
 Finds common password hashes on Windows networks (pass the hash)
+
+
 Locates logged in Domain Administrator accounts
 
 Screen Shot    
