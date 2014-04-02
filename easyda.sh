@@ -58,6 +58,29 @@ else
         exit 1
 fi
 
+
+#Check for mktemp
+which mktemp >/dev/null
+if [ $? -eq 0 ]
+    then
+        echo ""
+else
+        echo ""
+        echo -e "\e[00;31mUnable to find the required mktemp program, install and try again\e[00m"
+        exit 1
+fi
+
+
+#Create Secure Tmp Files
+SMB=$(mktemp "$TMPDIR"smb.XXXXXXXXXX)
+COMMIPS=$(mktemp "$TMPDIR"commonips.XXXXXXXXXX)
+MULTIHASH=$(mktemp "$TMPDIR"multihash.XXXXXXXXXX)
+LOGGEDIN=$(mktemp "$TMPDIR"loggedin.XXXXXXXXXX)
+LOGGEDINCLEAN=$(mktemp "$TMPDIR"loggedinclean.XXXXXXXXXX)
+DAS=$(mktemp "$TMPDIR"das.XXXXXXXXXX)
+DOMADMIN=$(mktemp "$TMPDIR"domainadmins.XXXXXXXXXX)
+
+
 echo -e "\e[1;31m-------------------------------------------------------------------------------------------------------------------------------------------------------------\e[00m"
 echo -e "\e[01;31m[?]\e[00m Do you want to scan with a LM:NTLM Hash or clear text password? Enter 1, 2, 3, or 4 and press enter"
 echo -e "\e[1;31m-------------------------------------------------------------------------------------------------------------------------------------------------------------\e[00m"
@@ -130,9 +153,14 @@ read PWORHASH
 					echo -e "\e[01;32m[-]\e[00m I can read "$NOHASHCOUNT" hashes from the file"
 					
 			fi
-			cat "$HASHFILE" |cut -d ":" -f 1 >/tmp/user.txt
-			cat "$HASHFILE" |cut -d ":" -f 3,4 >/tmp/pass.txt
-			paste /tmp/user.txt /tmp/pass.txt >/tmp/userpass.txt
+
+			TMPUSER=$(mktemp "$TMPDIR"user.XXXXXXXXXX)
+			TMPPASS=$(mktemp "$TMPDIR"pass.XXXXXXXXXX)
+			TMPUSPA=$(mktemp "$TMPDIR"userpass.XXXXXXXXXX)
+
+			cat "$HASHFILE" |cut -d ":" -f 1 >	 $TMPUSER
+			cat "$HASHFILE" |cut -d ":" -f 3,4 > $TMPPASS
+			paste $TMPUSER $TMPPASS > $TMPUSPA
 
 
 	# clear text credentials input		
@@ -212,19 +240,19 @@ echo ""
 
 if [ "$PWORHASH" = "1" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee /tmp/smb.txt |grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $SMB |grep -i "scanned" | cut -d "]" -f 2
 
 elif [ "$PWORHASH" = "2" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP USERPASS_FILE="$TMPDIR"userpass.txt STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee /tmp/smb.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP USERPASS_FILE=$TMPUSPA STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $SMB | grep -i "scanned" | cut -d "]" -f 2
 
 elif [ "$PWORHASH" = "3" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee /tmp/smb.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=FALSE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $SMB | grep -i "scanned" | cut -d "]" -f 2
 
 elif [ "$PWORHASH" = "4" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=TRUE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee /tmp/smb.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_login RHOSTS=$IPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER STOP_ON_SUCCESS=FALSE PRESERVE_DOMAINS=FALSE RPORT="445" BLANK_PASSWORDS=TRUE USER_AS_PASS=FALSE THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $SMB | grep -i "scanned" | cut -d "]" -f 2
 
 else
 	echo ""		
@@ -234,9 +262,9 @@ echo ""
 
 if [ "$PWORHASH" = "1" ]
 		then
-			COMMON=$(cat /tmp/smb.txt | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
-			cat /tmp/smb.txt | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 >/tmp/commonips.txt
-			COMMONNO=$(cat /tmp/smb.txt | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
+			COMMON=$(cat $SMB | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
+			cat $SMB | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 > $COMMIPS
+			COMMONNO=$(cat $SMB | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
 
 			if [ -z "$COMMON" ]
 				then
@@ -244,15 +272,15 @@ if [ "$PWORHASH" = "1" ]
 					echo ""
 					exit 1
 			else
-					MUSER=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
-					MHASH=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
+					MUSER=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
+					MHASH=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
 					UHMATCH=$(echo $HASH | grep -i "$MUSER" | grep -i "$MHASH")
 					echo -e "\e[01;32m[+]\e[00m Success! Common credentials were found, \e[01;32m"$COMMONNO"\e[00m hosts matched."
 					echo ""
 					echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
 					echo "$UHMATCH"
 					echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
-					paste /tmp/commonips.txt
+					paste $COMMIPS
 					echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
 					echo ""
 					echo -e "\e[01;32m"$COMMONNO"\e[00m hosts had the same credentials."
@@ -262,9 +290,9 @@ if [ "$PWORHASH" = "1" ]
 elif [ "$PWORHASH" = "2" ]
 
 	then
-			MULTICOM=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |wc -l)
-			cat /tmp/smb.txt | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 |sort --unique >/tmp/commonips.txt
-			COMMONNO=$(cat /tmp/smb.txt |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique |wc -l)
+			MULTICOM=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |wc -l)
+			cat $SMB | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 |sort --unique > $COMMIPS
+			COMMONNO=$(cat $SMB |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique |wc -l)
 
 				if [ $MULTICOM = 0 ]
 					then
@@ -274,34 +302,34 @@ elif [ "$PWORHASH" = "2" ]
 						
 				elif [ $MULTICOM = 1 ]	
 					then
-						MUSER=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
-						MHASH=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
+						MUSER=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
+						MHASH=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
 						UHMATCH=$(cat $HASHFILE | grep -i "$MUSER" | grep -i "$MHASH")
 						echo -e "\e[01;32m[+]\e[00m Success! Common credentials were found, \e[01;32m"$COMMONNO"\e[00m hosts matched."
 						echo ""
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
 						echo "$UHMATCH"
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
-						paste /tmp/commonips.txt
+						paste $COMMIPS
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
 						echo ""
 						echo -e "\e[01;32m"$COMMONNO"\e[00m hosts had the same credentials."
 						
 				elif [ $MULTICOM > 1 ]	
 					then
-						MUSER=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
-						MHASH=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
+						MUSER=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
+						MHASH=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//')
 						UHMATCH=$(cat $HASHFILE | grep -i "$MUSER" | grep -i "$MHASH")
-						IPMATCH=$(cat /tmp/smb.txt | grep -i "status_success" | grep -i "$MUSER" | grep -i "$MHASH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique)
-						MULTICOMMONNO=$(cat /tmp/smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d' |wc -l)
+						IPMATCH=$(cat $SMB | grep -i "status_success" | grep -i "$MUSER" | grep -i "$MHASH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique)
+						MULTICOMMONNO=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d' |wc -l)
 						echo -e "\e[01;32m[+]\e[00m Success! \e[01;32m"$MULTICOMMONNO"\e[00m sets of credentials worked on multiple hosts."
 						echo ""
 						for MULTIHASHMATCH in $(echo $MHASH)
 						do
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
-						cat $HASHFILE | grep -i "$MULTIHASHMATCH" | tee -a /tmp/multihash.txt
+						cat $HASHFILE | grep -i "$MULTIHASHMATCH" | tee -a $MULTIHASH
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
-						cat /tmp/smb.txt | grep -i "status_success" | grep -i "$MULTIHASHMATCH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique | tee -a /tmp/multihash.txt
+						cat $SMB | grep -i "status_success" | grep -i "$MULTIHASHMATCH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique | tee -a $MULTIHASH
 						echo -e "\e[01;32m----------------------------------------------------------------------------------------\e[00m"
 						echo ""
 						done
@@ -313,9 +341,9 @@ elif [ "$PWORHASH" = "2" ]
 		
 elif [ "$PWORHASH" = "3" ]
 		then
-			COMMON=$(cat /tmp/smb.txt | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
-			cat /tmp/smb.txt | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 >/tmp/commonips.txt
-			COMMONNO=$(cat /tmp/smb.txt |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
+			COMMON=$(cat $SMB | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
+			cat $SMB | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 > $COMMIPS
+			COMMONNO=$(cat $SMB |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
 
 				if [ -z "$COMMON" ]
 					then
@@ -326,7 +354,7 @@ elif [ "$PWORHASH" = "3" ]
 						echo -e "\e[01;32m[+]\e[00m Success! Common credentials were found, \e[01;32m"$COMMONNO"\e[00m hosts matched."
 						echo ""
 						echo -e "\e[01;32m--------------------------------------------------------\e[00m"
-						paste /tmp/commonips.txt
+						paste $COMMIPS
 						echo -e "\e[01;32m--------------------------------------------------------\e[00m"
 						echo ""
 						echo -e "\e[01;32m"$COMMONNO"\e[00m hosts had the same credentials."
@@ -334,9 +362,9 @@ elif [ "$PWORHASH" = "3" ]
 				
 elif [ "$PWORHASH" = "4" ]
 		then
-			COMMON=$(cat /tmp/smb.txt | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
-			cat /tmp/smb.txt | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 >/tmp/commonips.txt
-			COMMONNO=$(cat /tmp/smb.txt |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
+			COMMON=$(cat $SMB | grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1)
+			cat $SMB | grep -i "status_success"  |awk '{print $2}' |cut -d ":" -f 1 > $COMMIPS
+			COMMONNO=$(cat $SMB |grep -i "status_success" | awk '{print $2}' |cut -d ":" -f 1 |wc -l)
 
 				if [ -z "$COMMON" ]
 					then
@@ -347,7 +375,7 @@ elif [ "$PWORHASH" = "4" ]
 						echo -e "\e[01;32m[+]\e[00m Success! Blank passwords were found, \e[01;32m"$COMMONNO"\e[00m hosts had no password set."
 						echo ""
 						echo -e "\e[01;32m--------------------------------------------------------\e[00m"
-						paste /tmp/commonips.txt
+						paste $COMMIPS
 						echo -e "\e[01;32m--------------------------------------------------------\e[00m"
 						echo ""
 						echo -e "\e[01;32m"$COMMONNO"\e[00m hosts had blank passwords."
@@ -465,15 +493,15 @@ echo ""
 
 if [ "$PWORHASH" = "1" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:"$TMPDIR"commonips.txt SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee "$TMPDIR"loggedin.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:$COMMIPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $LOGGEDIN | grep -i "scanned" | cut -d "]" -f 2
 			echo ""
 elif [ "$PWORHASH" = "2" ]
 		then
-			MUSER=$(cat "$TMPDIR"smb.txt | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
-			MHASH=$(cat "$TMPDIR"smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d')
+			MUSER=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 2 | awk '{print $NF}' |sort --unique)
+			MHASH=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d')
 			UHMATCH=$(cat $HASHFILE | grep -i "$MUSER" | grep -i "$MHASH")
-			IPMATCH=$(cat "$TMPDIR"smb.txt | grep -i "status_success" | grep -i "$MUSER" | grep -i "$MHASH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique)
-			MULTICOMMONNO=$(cat "$TMPDIR"smb.txt | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d' |wc -l)
+			IPMATCH=$(cat $SMB | grep -i "status_success" | grep -i "$MUSER" | grep -i "$MHASH" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique)
+			MULTICOMMONNO=$(cat $SMB | grep -i "status_success" |cut -d ":" -f 3,4 | cut -d " " -f 1,2 |sort --unique |sed 's/^[ \t]*//' |sed '/^$/d' |wc -l)
 			echo -e "\e[01;33m[!]\e[00m Warning! As multiple sets of credentials were found I will need to run the scan \e[01;32m"$MULTICOMMONNO"\e[00m times, so it will be slower than normal."
 			echo ""
 			for MULTIHASHMATCH2 in $(echo $MHASH)
@@ -483,27 +511,27 @@ elif [ "$PWORHASH" = "2" ]
 			echo -e "\e[01;32m--------------------------------------------------------------------------------------------------------------------------------------------------------------\e[00m"
 			echo -e "\e[01;32m[-]\e[00m Scanning using the following credentials "$MULTISMBUSER" "$MULTISMBHASH" on the following hosts:"
 			echo -e "\e[01;32m--------------------------------------------------------------------------------------------------------------------------------------------------------------\e[00m"
-			cat "$TMPDIR"smb.txt | grep -i "status_success" | grep -i "$MULTIHASHMATCH2" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique > "$TMPDIR"multihaships.txt
-			paste "$TMPDIR"multihaships.txt
+			cat $SMB | grep -i "status_success" | grep -i "$MULTIHASHMATCH2" | awk '{print $2}' |cut -d ":" -f 1 |sort --unique > $MULTIHASH
+			paste $MULTIHASH
 			echo ""
-			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:"$TMPDIR"multihaships.txt SMBDOMAIN=WORKGROUP SMBUSER=$MULTISMBUSER SMBPASS=$MULTISMBHASH THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee -a "$TMPDIR"loggedin.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:$MULTIHASH SMBDOMAIN=WORKGROUP SMBUSER=$MULTISMBUSER SMBPASS=$MULTISMBHASH THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee -a $LOGGEDIN | grep -i "scanned" | cut -d "]" -f 2
 			echo ""
 			done
 			echo ""
 elif [ "$PWORHASH" = "3" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:"$TMPDIR"commonips.txt SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee "$TMPDIR"loggedin.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:$COMMIPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER SMBPASS=$SMBPASS THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $LOGGEDIN | grep -i "scanned" | cut -d "]" -f 2
 			echo ""
 elif [ "$PWORHASH" = "4" ]
 		then
-			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:"$TMPDIR"commonips.txt SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee "$TMPDIR"loggedin.txt | grep -i "scanned" | cut -d "]" -f 2
+			msfcli auxiliary/scanner/smb/smb_enumusers_domain RHOSTS=file:$COMMIPS SMBDOMAIN=WORKGROUP SMBUSER=$SMBUSER THREADS=$THREADS VERBOSE=true E 2>/dev/null |tee $LOGGEDIN | grep -i "scanned" | cut -d "]" -f 2
 			echo ""
 else
 	echo ""
 fi
 
-LOGGEDINDOMAIN=$(cat "$TMPDIR"loggedin.txt |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |tr '[\000-\011\013-\037\177-\377]' " " | sed 's/ //g' |grep -i "$DOMAINNAME" |sed -e "s/$DOMAINNAME/ $DOMAINNAME/gI")
-cat "$TMPDIR"loggedin.txt |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |tr '[\000-\011\013-\037\177-\377]' " " | sed 's/ //g' |grep -i "$DOMAINNAME" |sed -e "s/$DOMAINNAME/ $DOMAINNAME/gI" >"$TMPDIR"loggedinclean.txt
+LOGGEDINDOMAIN=$(cat $LOGGEDIN |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |tr '[\000-\011\013-\037\177-\377]' " " | sed 's/ //g' |grep -i "$DOMAINNAME" |sed -e "s/$DOMAINNAME/ $DOMAINNAME/gI")
+cat $LOGGEDIN |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |tr '[\000-\011\013-\037\177-\377]' " " | sed 's/ //g' |grep -i "$DOMAINNAME" |sed -e "s/$DOMAINNAME/ $DOMAINNAME/gI" > $LOGGEDINCLEAN
 if [ -z "$LOGGEDINDOMAIN" ]
 	then
 		echo ""
@@ -512,7 +540,7 @@ if [ -z "$LOGGEDINDOMAIN" ]
 		echo -e "\e[01;32m[-]\e[00mThe following users were found, double check the list to see if any users of interest or you may have mistyped the domain name"
 		echo ""
 		echo -e "\e[01;32m-----------------------------------------------------------------------------------------\e[00m"
-		cat "$TMPDIR"loggedin.txt |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |sed '/^$/d' | sort --unique
+		cat "$LOGGEDIN |grep  -a "*" |grep  -a -v -i "scanned" | grep -a -v -i "auxiliary" |awk '{print $2,$4}' |grep -a -v -i "*" | grep -a -i -v '\$' |grep -a -i -v "/" |grep -a -i -v "-" |sed '/^$/d' | sort --unique
 		echo -e "\e[01;32m-----------------------------------------------------------------------------------------\e[00m"
 		echo ""
 		exit 1
@@ -521,7 +549,7 @@ if [ -z "$LOGGEDINDOMAIN" ]
 		echo -e "\e[01;32m[+]\e[00m The following logged in users for the \e[01;32m"$DOMAINNAME"\e[00m domain were found"
 		echo ""
 		echo -e "\e[01;32m-----------------------------------------------------------------------------------------\e[00m"
-		paste "$TMPDIR"loggedinclean.txt | tr [a-z] [A-Z] |sed '/^$/d' |sort --unique
+		paste "$LOGGINCLEAN | tr [a-z] [A-Z] |sed '/^$/d' |sort --unique
 		echo -e "\e[01;32m-----------------------------------------------------------------------------------------\e[00m"
 		echo ""
 fi
@@ -530,16 +558,16 @@ fi
 
 if [ "$DALIST" = "1" ]
 	then
-		cat "$DADMINSLIST1" |cut -d " " -f 1-50 |grep -v -i "members" |grep -i -v "group name" |grep -i -v "comment" |grep -i -v "the command" |grep -i -v '\---' | awk '{for(i=1;i<=NF;i++)if(arr[i] ~ /./)arr[i]=arr[i]"\n"$i;else arr[i]=$i}END{for(x=1;x<=length(arr);x++)printf("%s\n",arr[x])}' | sort --unique >"$TMPDIR"das.txt
+		cat "$DADMINSLIST1" |cut -d " " -f 1-50 |grep -v -i "members" |grep -i -v "group name" |grep -i -v "comment" |grep -i -v "the command" |grep -i -v '\---' | awk '{for(i=1;i<=NF;i++)if(arr[i] ~ /./)arr[i]=arr[i]"\n"$i;else arr[i]=$i}END{for(x=1;x<=length(arr);x++)printf("%s\n",arr[x])}' | sort --unique > $DAS
 		echo -e "\e[01;32m[-]\e[00m Checking if logged in users are within the domain admins list provided"
 		echo ""
-		grep -a -f "$TMPDIR"das.txt "$TMPDIR"loggedinclean.txt >"$TMPDIR"domainadmins.txt
+		grep -a -f $DAS $LOGGEDINCLEAN > $DOMADMIN
 			if [ $? = 0 ]
 				then
 					echo -e "\e[01;32m[+]\e[00m The following logged in users are Domain Administrators for the \e[01;32m"$DOMAINNAME"\e[00m domain"
 					echo ""
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
-					paste "$TMPDIR"domainadmins.txt | tr [a-z] [A-Z] |sort --unique
+					paste "$DOMADMIN | tr [a-z] [A-Z] |sort --unique
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
 					echo ""
 					echo -e "\e[01;32m[-]\e[00m Use Incognito/Metasploit to impersonate/steal the DA token."
@@ -553,13 +581,13 @@ elif [ "$DALIST" = "2" ]
 	then
 		echo -e "\e[01;32m[-]\e[00m Checking if logged in users are within the domain admins list provided"
 		echo ""
-		grep -a -f "$DADMINSLIST2" "$TMPDIR"loggedinclean.txt >"$TMPDIR"domainadmins.txt
+		grep -a -f $DADMINSLIST2 $LOGGEDINCLEAN > $DOMADMIN
 			if [ $? = 0 ]
 				then
 					echo -e "\e[01;32m[+]\e[00m The following logged in users are Domain Administrators for the \e[01;32m"$DOMAINNAME"\e[00m domain"
 					echo ""
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
-					paste "$TMPDIR"domainadmins.txt | tr [a-z] [A-Z] |sort --unique
+					paste "$DOMADMIN | tr [a-z] [A-Z] |sort --unique
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
 					echo ""
 					echo -e "\e[01;32m[-]\e[00m Use Incognito/Metasploit to impersonate/steal the DA token."
@@ -573,13 +601,13 @@ elif [ "$DALIST" = "3" ]
 	then
 		echo -e "\e[01;32m[-]\e[00m Checking if logged in users are within the domain admins list provided"
 		echo ""
-		grep -a "$DASINGLESEARCH" "$TMPDIR"loggedinclean.txt >"$TMPDIR"domainadmins.txt
+		grep -a $DASINGLESEARCH $LOGGEDINCLEAN > $DOMADMIN
 			if [ $? = 0 ]
 				then
 					echo -e "\e[01;32m[+]\e[00m The following logged in users are Domain Administrators for the \e[01;32m"$DOMAINNAME"\e[00m domain"
 					echo ""
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
-					paste "$TMPDIR"domainadmins.txt | tr [a-z] [A-Z] |sort --unique
+					paste "$DOMADMIN | tr [a-z] [A-Z] |sort --unique
 					echo -e "\e[01;32m--------------------------------------------------------\e[00m"
 					echo ""
 					echo -e "\e[01;32m[-]\e[00m Use Incognito/Metasploit to impersonate/steal the DA token."
@@ -593,16 +621,16 @@ else
 fi
 
 #cleanup temp files
-rm "$TMPDIR"commonips.txt  >/dev/null 2>&1
-rm "$TMPDIR"loggedin.txt  >/dev/null 2>&1
-rm "$TMPDIR"loggedinclean.txt  >/dev/null 2>&1
-rm "$TMPDIR"pass.txt  >/dev/null 2>&1
-rm "$TMPDIR"user.txt  >/dev/null 2>&1
-rm "$TMPDIR"multihaships.txt  >/dev/null 2>&1
-rm "$TMPDIR"multihash.txt  >/dev/null 2>&1
-rm "$TMPDIR"smb.txt  >/dev/null 2>&1
-rm "$TMPDIR"userpass.txt  >/dev/null 2>&1
-rm "$TMPDIR"das.txt  >/dev/null 2>&1
-rm "$TMPDIR"domainadmins.txt  >/dev/null 2>&1
+rm $COMMIPS  >/dev/null 2>&1
+rm $LOGGEDIN  >/dev/null 2>&1
+rm $LOGGEDINCLEAN  >/dev/null 2>&1
+rm $TMPUSER  >/dev/null 2>&1
+rm $TMPPASS  >/dev/null 2>&1
+rm $$MULTIHASH  >/dev/null 2>&1
+rm $MULTIHASH  >/dev/null 2>&1
+rm $SMB  >/dev/null 2>&1
+rm $TMPUSPA  >/dev/null 2>&1
+rm $DAS  >/dev/null 2>&1
+rm $DOMADMIN  >/dev/null 2>&1
 
 exit 0
